@@ -1,6 +1,7 @@
 -- Evade Lag Switch + Transparency
 -- Original lag switch: justmoon56 / RawScripts
 -- Mobile transparency + drag + position lock layer.
+-- Transparency is scoped STRICTLY to the detected lag-switch window.
 
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
@@ -488,25 +489,10 @@ if #lagScopes == 0 then
     end
 end
 
-local scopeConnections = {}
-
-local function trackScope(scope)
-    for _, obj in ipairs(scope:GetDescendants()) do
-        if visual(obj) then
-            remember(obj)
-        end
-    end
-
-    scopeConnections[#scopeConnections + 1] = scope.DescendantAdded:Connect(function(obj)
-        if visual(obj) then
-            remember(obj)
-        end
-    end)
-end
-
-for _, scope in ipairs(lagScopes) do
-    trackScope(scope)
-end
+-- IMPORTANT: lagScopes are discovery containers only.
+-- Never apply transparency to an entire ScreenGui/CoreGui branch: executors
+-- can share those containers with unrelated Roblox/game UI.
+-- We first find the actual lag-switch window, then track ONLY that subtree.
 
 -- Locate the actual lag-switch window by its visible title.
 local function getText(obj)
@@ -567,8 +553,31 @@ local function findLagWindow()
 end
 
 local lagWindow = findLagWindow()
+local lagWindowConnections = {}
+
+local function trackLagWindow(window)
+    if not window then return end
+
+    -- Include the window itself plus only its descendants.
+    if visual(window) then
+        remember(window)
+    end
+
+    for _, obj in ipairs(window:GetDescendants()) do
+        if visual(obj) then
+            remember(obj)
+        end
+    end
+
+    lagWindowConnections[#lagWindowConnections + 1] = window.DescendantAdded:Connect(function(obj)
+        if visual(obj) and obj:IsDescendantOf(window) then
+            remember(obj)
+        end
+    end)
+end
 
 if lagWindow then
+    trackLagWindow(lagWindow)
     lagWindow.Active = true
 
     local positionLocked = true
@@ -682,4 +691,6 @@ end
 
 if not okRun then
     showError(runtimeError)
+elseif not lagWindow then
+    showError("Janela do Lag Switch nao encontrada; transparencia nao foi aplicada.")
 end
